@@ -18,7 +18,7 @@
     }
   ],
   "vars": {
-    "ALLOWED_ORIGIN": "https://blueprint-web.ronymateo.workers.dev/",
+    "ALLOWED_ORIGIN": "https://blueprint-web.ronymateo.workers.dev",
     "APP_URL": "https://blueprint-web.ronymateo.workers.dev"
   }
 }
