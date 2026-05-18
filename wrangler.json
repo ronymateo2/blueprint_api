@@ -3,8 +3,12 @@
   "name": "blueprint-api",
   "main": "src/index.ts",
   "compatibility_date": "2025-10-08",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -14,7 +18,7 @@
     }
   ],
   "vars": {
-    "ALLOWED_ORIGIN": "http://localhost:5173",
-    "APP_URL": "http://localhost:5173"
+    "ALLOWED_ORIGIN": "https://blueprint-web.ronymateo.workers.dev/",
+    "APP_URL": "https://blueprint-web.ronymateo.workers.dev"
   }
 }
