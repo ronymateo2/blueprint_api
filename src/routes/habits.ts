@@ -48,6 +48,8 @@ habits.post('/', async (c) => {
     unit?: string;
     points?: number;
     sort_order?: number;
+    frequency_type?: string;
+    frequency_config?: string;
   }>();
 
   if (!body.name || !body.type) return c.json({ error: 'name and type required' }, 400);
@@ -55,7 +57,7 @@ habits.post('/', async (c) => {
   const id = newId();
   const now = nowIso();
   await c.env.DB.prepare(
-    'INSERT INTO habits (id, user_id, name, icon, type, goal, unit, points, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO habits (id, user_id, name, icon, type, goal, unit, points, sort_order, frequency_type, frequency_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
     .bind(
       id,
@@ -67,6 +69,8 @@ habits.post('/', async (c) => {
       body.unit ?? null,
       body.points ?? 5,
       body.sort_order ?? 0,
+      body.frequency_type ?? 'daily',
+      body.frequency_config ?? '{}',
       now,
       now,
     )
@@ -108,6 +112,8 @@ habits.put('/:id', async (c) => {
     unit?: string;
     points?: number;
     sort_order?: number;
+    frequency_type?: string;
+    frequency_config?: string;
   }>();
   const now = nowIso();
   await c.env.DB.prepare(
@@ -119,6 +125,8 @@ habits.put('/:id', async (c) => {
       unit = COALESCE(?, unit),
       points = COALESCE(?, points),
       sort_order = COALESCE(?, sort_order),
+      frequency_type = COALESCE(?, frequency_type),
+      frequency_config = COALESCE(?, frequency_config),
       updated_at = ?
     WHERE id = ?`,
   )
@@ -130,6 +138,8 @@ habits.put('/:id', async (c) => {
       body.unit ?? null,
       body.points ?? null,
       body.sort_order ?? null,
+      body.frequency_type ?? null,
+      body.frequency_config ?? null,
       now,
       id,
     )
