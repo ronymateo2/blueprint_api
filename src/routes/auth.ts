@@ -108,7 +108,8 @@ auth.get('/google/callback', async (c) => {
       .run();
   }
 
-  const jwt = await signJwt({ sub: userId, email: googleUser.email }, c.env.JWT_SECRET);
+  const userRow = await db.prepare('SELECT timezone FROM users WHERE id = ?').bind(userId).first<{ timezone: string }>();
+  const jwt = await signJwt({ sub: userId, email: googleUser.email, timezone: userRow?.timezone ?? 'UTC' }, c.env.JWT_SECRET);
   return c.redirect(`${c.env.APP_URL}/auth/callback?token=${jwt}`);
 });
 
@@ -125,6 +126,7 @@ auth.get('/me', authMiddleware, async (c) => {
 
 auth.patch('/me', authMiddleware, async (c) => {
   const userId = c.get('userId');
+  const userEmail = c.get('userEmail');
   const body = await c.req.json<{ timezone?: string; display_name?: string }>();
   const now = nowIso();
   await c.env.DB.prepare('UPDATE users SET timezone = COALESCE(?, timezone), display_name = COALESCE(?, display_name), updated_at = ? WHERE id = ?')
@@ -132,8 +134,13 @@ auth.patch('/me', authMiddleware, async (c) => {
     .run();
   const user = await c.env.DB.prepare('SELECT id, email, display_name, avatar_url, timezone FROM users WHERE id = ?')
     .bind(userId)
-    .first();
-  return c.json(user);
+    .first<{ id: string; email: string; display_name: string | null; avatar_url: string | null; timezone: string }>();
+  if (!user) return c.json({ error: 'User not found' }, 404);
+  let token: string | undefined;
+  if (body.timezone) {
+    token = await signJwt({ sub: userId, email: userEmail, timezone: user.timezone }, c.env.JWT_SECRET);
+  }
+  return c.json({ ...user, token });
 });
 
 export default auth;
