@@ -21,8 +21,8 @@ habits.get('/', async (c) => {
     FROM habits h
     LEFT JOIN reminders r ON r.habit_id = h.id
     WHERE h.user_id = ? AND ${archived ? 'h.archived_at IS NOT NULL' : 'h.archived_at IS NULL'}
-    GROUP BY h.id
-    ORDER BY h.sort_order ASC, h.created_at ASC`,
+    GROUP BY h.sort_order, h.created_at, h.id
+    ORDER BY h.sort_order ASC, h.created_at ASC, h.id ASC`,
   )
     .bind(userId)
     .all();
