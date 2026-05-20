@@ -50,6 +50,8 @@ habits.post('/', async (c) => {
     sort_order?: number;
     frequency_type?: string;
     frequency_config?: string;
+    start_date?: string | null;
+    end_date?: string | null;
   }>();
 
   if (!body.name || !body.type) return c.json({ error: 'name and type required' }, 400);
@@ -57,7 +59,7 @@ habits.post('/', async (c) => {
   const id = newId();
   const now = nowIso();
   await c.env.DB.prepare(
-    'INSERT INTO habits (id, user_id, name, icon, type, goal, unit, points, sort_order, frequency_type, frequency_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO habits (id, user_id, name, icon, type, goal, unit, points, sort_order, frequency_type, frequency_config, start_date, end_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
     .bind(
       id,
@@ -71,6 +73,8 @@ habits.post('/', async (c) => {
       body.sort_order ?? 0,
       body.frequency_type ?? 'daily',
       body.frequency_config ?? '{}',
+      body.start_date ?? null,
+      body.end_date ?? null,
       now,
       now,
     )
@@ -114,8 +118,12 @@ habits.put('/:id', async (c) => {
     sort_order?: number;
     frequency_type?: string;
     frequency_config?: string;
+    start_date?: string | null;
+    end_date?: string | null;
   }>();
   const now = nowIso();
+  const startDateSet = 'start_date' in body ? 1 : 0;
+  const endDateSet = 'end_date' in body ? 1 : 0;
   await c.env.DB.prepare(
     `UPDATE habits SET
       name = COALESCE(?, name),
@@ -127,6 +135,8 @@ habits.put('/:id', async (c) => {
       sort_order = COALESCE(?, sort_order),
       frequency_type = COALESCE(?, frequency_type),
       frequency_config = COALESCE(?, frequency_config),
+      start_date = CASE WHEN ? = 1 THEN ? ELSE start_date END,
+      end_date = CASE WHEN ? = 1 THEN ? ELSE end_date END,
       updated_at = ?
     WHERE id = ?`,
   )
@@ -140,6 +150,8 @@ habits.put('/:id', async (c) => {
       body.sort_order ?? null,
       body.frequency_type ?? null,
       body.frequency_config ?? null,
+      startDateSet, body.start_date ?? null,
+      endDateSet, body.end_date ?? null,
       now,
       id,
     )
