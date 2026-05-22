@@ -44,19 +44,23 @@ entries.post('/', async (c) => {
   if (!body.habit_id) return c.json({ error: 'habit_id required' }, 400);
 
   // Verify habit belongs to user and get points
-  const habit = await c.env.DB.prepare('SELECT id, points FROM habits WHERE id = ? AND user_id = ?')
+  const habit = await c.env.DB.prepare('SELECT id, points, type FROM habits WHERE id = ? AND user_id = ?')
     .bind(body.habit_id, userId)
-    .first<{ id: string; points: number }>();
+    .first<{ id: string; points: number; type: string }>();
   if (!habit) return c.json({ error: 'Habit not found' }, 404);
 
   const id = newId();
   const now = nowIso();
   const loggedAt = body.logged_at ?? now;
+  const value = body.value ?? 1;
+  const entryPoints = (habit.type === 'time' || habit.type === 'count' || habit.type === 'qty')
+    ? habit.points * value
+    : habit.points;
 
   await c.env.DB.prepare(
     'INSERT INTO entries (id, user_id, habit_id, value, points, logged_at, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   )
-    .bind(id, userId, body.habit_id, body.value ?? 1, habit.points, loggedAt, body.note ?? null, now)
+    .bind(id, userId, body.habit_id, value, entryPoints, loggedAt, body.note ?? null, now)
     .run();
 
   const entry = await c.env.DB.prepare('SELECT * FROM entries WHERE id = ?').bind(id).first();
