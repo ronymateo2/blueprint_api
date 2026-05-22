@@ -6,6 +6,7 @@ import reminders from './routes/reminders';
 import entries from './routes/entries';
 import stats from './routes/stats';
 import points from './routes/points';
+import skips from './routes/skips';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -32,6 +33,7 @@ app.route('/api/reminders', reminders);
 app.route('/api/entries', entries);
 app.route('/api/stats', stats);
 app.route('/api/points', points);
+app.route('/api/skips', skips);
 
 app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
