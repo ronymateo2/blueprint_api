@@ -20,6 +20,23 @@ function todayLocal(timezone: string): string {
   return toLocalDateStr(new Date().toISOString(), timezone);
 }
 
+// Snapshot of current UTC offset in minutes for the given timezone.
+// Used to build SQLite date modifiers (e.g. "+330 minutes") for local-date grouping.
+// Approximation during DST transitions (±1h) — acceptable for habit tracking.
+function getOffsetMinutes(tz: string): number {
+  try {
+    const now = new Date();
+    const localStr = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: tz,
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }).format(now);
+    return Math.round((new Date(localStr.replace(' ', 'T') + 'Z').getTime() - now.getTime()) / 60000);
+  } catch {
+    return 0;
+  }
+}
+
 stats.get('/', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
@@ -83,6 +100,55 @@ stats.get('/', async (c) => {
     weeklyChart,
     timezone: tz,
   });
+});
+
+stats.get('/home', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const user = await db.prepare('SELECT timezone FROM users WHERE id = ?').bind(userId).first<{ timezone: string }>();
+  const tz = user?.timezone ?? 'UTC';
+  const today = todayLocal(tz);
+
+  const offset = getOffsetMinutes(tz);
+  const mod = `${offset >= 0 ? '+' : ''}${offset} minutes`;
+
+  const weekBase = new Date(today + 'T12:00:00Z');
+
+  const weekStartDate = new Date(weekBase);
+  weekStartDate.setUTCDate(weekBase.getUTCDate() - 6);
+  const weekStart = toLocalDateStr(weekStartDate.toISOString(), tz);
+
+  const streakCutoffDate = new Date(weekBase);
+  streakCutoffDate.setUTCDate(weekBase.getUTCDate() - 399);
+  const streakCutoff = toLocalDateStr(streakCutoffDate.toISOString(), tz);
+
+  const [weekResult, streakResult] = await db.batch([
+    db.prepare(`SELECT date(logged_at, '${mod}') as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? GROUP BY d`).bind(userId, weekStart),
+    db.prepare(`SELECT DISTINCT date(logged_at, '${mod}') as d FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? ORDER BY d DESC`).bind(userId, streakCutoff),
+  ]);
+
+  const weekMap = new Map<string, number>(
+    (weekResult.results as { d: string; pts: number }[]).map(r => [r.d, r.pts])
+  );
+  const todayPoints = weekMap.get(today) ?? 0;
+
+  const weeklyChart: number[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(weekBase);
+    d.setUTCDate(weekBase.getUTCDate() - i);
+    weeklyChart.push(weekMap.get(toLocalDateStr(d.toISOString(), tz)) ?? 0);
+  }
+
+  let streak = 0;
+  const checkDate = new Date(today + 'T12:00:00Z');
+  for (const { d } of streakResult.results as { d: string }[]) {
+    if (d !== toLocalDateStr(checkDate.toISOString(), tz)) break;
+    streak++;
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+
+  return c.json({ todayPoints, streak, weeklyChart });
 });
 
 export default stats;
