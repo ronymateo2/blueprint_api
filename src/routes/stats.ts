@@ -24,11 +24,10 @@ stats.get('/', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
 
-  // Get user timezone
   const user = await db.prepare('SELECT timezone FROM users WHERE id = ?').bind(userId).first<{ timezone: string }>();
   const tz = user?.timezone ?? 'UTC';
+  const today = todayLocal(tz);
 
-  // All entries for this user
   const allEntries = await db
     .prepare('SELECT points, logged_at FROM entries WHERE user_id = ? ORDER BY logged_at ASC')
     .bind(userId)
@@ -36,54 +35,41 @@ stats.get('/', async (c) => {
 
   const rows = allEntries.results;
 
-  // Total points
-  const totalPoints = rows.reduce((s, r) => s + r.points, 0);
+  // Single O(n) pass: build date→points map, accumulate total
+  const dayPts = new Map<string, number>();
+  let totalPoints = 0;
+  for (const r of rows) {
+    const d = toLocalDateStr(r.logged_at, tz);
+    dayPts.set(d, (dayPts.get(d) ?? 0) + r.points);
+    totalPoints += r.points;
+  }
 
-  // Today's points
-  const today = todayLocal(tz);
-  const todayPoints = rows
-    .filter((r) => toLocalDateStr(r.logged_at, tz) === today)
-    .reduce((s, r) => s + r.points, 0);
+  const todayPoints = dayPts.get(today) ?? 0;
 
-  // Streak: consecutive days with at least 1 entry (ending today or yesterday)
-  const daySet = new Set(rows.map((r) => toLocalDateStr(r.logged_at, tz)));
+  // Streak: walk backwards from today using Map.has() — O(streak length)
   let streak = 0;
-  const check = new Date(today);
-  while (daySet.has(check.toISOString().slice(0, 10))) {
+  const checkDate = new Date(today + 'T12:00:00Z');
+  while (dayPts.has(toLocalDateStr(checkDate.toISOString(), tz))) {
     streak++;
-    check.setDate(check.getDate() - 1);
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
   }
 
-  // Weekly chart: last 7 days pts per day
+  // Weekly chart: last 7 days — O(7) map lookups
   const weeklyChart: number[] = [];
+  const weekBase = new Date(today + 'T12:00:00Z');
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    const pts = rows.filter((r) => toLocalDateStr(r.logged_at, tz) === ds).reduce((s, r) => s + r.points, 0);
-    weeklyChart.push(pts);
+    const d = new Date(weekBase);
+    d.setUTCDate(weekBase.getUTCDate() - i);
+    weeklyChart.push(dayPts.get(toLocalDateStr(d.toISOString(), tz)) ?? 0);
   }
 
-  // Heatmap: 14 weeks × 7 days = 98 values (0..1 intensity)
-  const heatmap: number[] = [];
-  const maxWeeklyPts = Math.max(...weeklyChart, 1);
-  for (let i = 97; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    const pts = rows.filter((r) => toLocalDateStr(r.logged_at, tz) === ds).reduce((s, r) => s + r.points, 0);
-    heatmap.push(Math.min(1, pts / (maxWeeklyPts || 1)));
-  }
-
-  // Level: every 500 pts = 1 level
   const level = Math.floor(totalPoints / 500) + 1;
   const levelXp = totalPoints % 500;
   const levelNext = 500;
 
-  // Week completion %
   const weekTotal = weeklyChart.reduce((s, v) => s + v, 0);
   const weekAvg = weekTotal / 7;
-  const allTimeAvg = rows.length ? totalPoints / Math.max(daySet.size, 1) : 0;
+  const allTimeAvg = dayPts.size > 0 ? totalPoints / dayPts.size : 0;
   const weekPct = allTimeAvg > 0 ? Math.round((weekAvg / allTimeAvg) * 100) : 0;
 
   return c.json({
@@ -95,7 +81,6 @@ stats.get('/', async (c) => {
     levelNext,
     weekPct,
     weeklyChart,
-    heatmap,
     timezone: tz,
   });
 });
