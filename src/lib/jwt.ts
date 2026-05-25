@@ -42,16 +42,25 @@ export async function signJwt(payload: Omit<JwtPayload, 'iat' | 'exp'>, secret: 
 export async function verifyJwt(token: string, secret: string): Promise<JwtPayload> {
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Invalid JWT');
-  const [header, body, sig] = parts;
+  const [headerB64, body, sig] = parts;
+
+  // Validate header alg/typ before trusting any payload
+  const headerJson = JSON.parse(new TextDecoder().decode(base64urlDecode(headerB64)));
+  if (headerJson.alg !== 'HS256' || headerJson.typ !== 'JWT') throw new Error('Invalid JWT algorithm');
+
   const key = await getKey(secret);
   const valid = await crypto.subtle.verify(
     'HMAC',
     key,
     base64urlDecode(sig),
-    new TextEncoder().encode(`${header}.${body}`),
+    new TextEncoder().encode(`${headerB64}.${body}`),
   );
   if (!valid) throw new Error('Invalid JWT signature');
+
   const payload: JwtPayload = JSON.parse(new TextDecoder().decode(base64urlDecode(body)));
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('JWT expired');
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) throw new Error('JWT expired');
+  // Reject tokens issued more than 60s in the future (clock skew guard)
+  if (payload.iat > now + 60) throw new Error('JWT issued in the future');
   return payload;
 }

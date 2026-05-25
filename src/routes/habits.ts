@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { authMiddleware } from '../middleware/auth';
 import { newId, nowIso } from '../lib/id';
+import { habitCreateSchema, habitUpdateSchema, reminderCreateSchema } from '../schemas';
 
 type Bindings = Env;
 type Variables = { userId: string; userEmail: string };
@@ -38,23 +40,9 @@ habits.get('/', async (c) => {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
-habits.post('/', async (c) => {
+habits.post('/', zValidator('json', habitCreateSchema), async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json<{
-    name: string;
-    icon?: string;
-    type: 'count' | 'time' | 'yn' | 'qty' | 'at';
-    goal?: number;
-    unit?: string;
-    points?: number;
-    sort_order?: number;
-    frequency_type?: string;
-    frequency_config?: string;
-    start_date?: string | null;
-    end_date?: string | null;
-  }>();
-
-  if (!body.name || !body.type) return c.json({ error: 'name and type required' }, 400);
+  const body = c.req.valid('json');
 
   const id = newId();
   const now = nowIso();
@@ -100,7 +88,7 @@ habits.get('/:id', async (c) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 
-habits.put('/:id', async (c) => {
+habits.put('/:id', zValidator('json', habitUpdateSchema), async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
   const habit = await c.env.DB.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?')
@@ -108,19 +96,7 @@ habits.put('/:id', async (c) => {
     .first();
   if (!habit) return c.json({ error: 'Not found' }, 404);
 
-  const body = await c.req.json<{
-    name?: string;
-    icon?: string;
-    type?: string;
-    goal?: number;
-    unit?: string;
-    points?: number;
-    sort_order?: number;
-    frequency_type?: string;
-    frequency_config?: string;
-    start_date?: string | null;
-    end_date?: string | null;
-  }>();
+  const body = c.req.valid('json');
   const now = nowIso();
   const startDateSet = 'start_date' in body ? 1 : 0;
   const endDateSet = 'end_date' in body ? 1 : 0;
@@ -214,7 +190,7 @@ habits.get('/:id/reminders', async (c) => {
   return c.json(rows.results);
 });
 
-habits.post('/:id/reminders', async (c) => {
+habits.post('/:id/reminders', zValidator('json', reminderCreateSchema), async (c) => {
   const userId = c.get('userId');
   const habitId = c.req.param('id');
   const habit = await c.env.DB.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?')
@@ -222,8 +198,7 @@ habits.post('/:id/reminders', async (c) => {
     .first();
   if (!habit) return c.json({ error: 'Not found' }, 404);
 
-  const body = await c.req.json<{ time: string; days?: string; enabled?: number }>();
-  if (!body.time) return c.json({ error: 'time required' }, 400);
+  const body = c.req.valid('json');
 
   const id = newId();
   await c.env.DB.prepare('INSERT INTO reminders (id, habit_id, time, days, enabled) VALUES (?, ?, ?, ?, ?)')

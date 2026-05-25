@@ -64,22 +64,22 @@ points.get('/', async (c) => {
   const streakCutoff = toLocalDateStr(streakCutoffDate.toISOString(), tz);
 
   const [totalRes, activeDaysRes, streakRes, dayRes, weekRes, monthRes, yearRes, heatRes] = await db.batch([
-    db.prepare(`SELECT COALESCE(SUM(points), 0) as total FROM entries WHERE user_id = ?`)
+    db.prepare('SELECT COALESCE(SUM(points), 0) as total FROM entries WHERE user_id = ?')
       .bind(userId),
-    db.prepare(`SELECT COUNT(DISTINCT date(logged_at, '${mod}')) as days FROM entries WHERE user_id = ?`)
-      .bind(userId),
-    db.prepare(`SELECT DISTINCT date(logged_at, '${mod}') as d FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? ORDER BY d DESC`)
-      .bind(userId, streakCutoff),
-    db.prepare(`SELECT CAST(strftime('%H', logged_at, '${mod}') AS INTEGER) as h, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') = ? GROUP BY h`)
-      .bind(userId, today),
-    db.prepare(`SELECT date(logged_at, '${mod}') as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? GROUP BY d`)
-      .bind(userId, weekStart),
-    db.prepare(`SELECT date(logged_at, '${mod}') as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? AND date(logged_at, '${mod}') <= ? GROUP BY d`)
-      .bind(userId, monthStart, today),
-    db.prepare(`SELECT CAST(strftime('%m', logged_at, '${mod}') AS INTEGER) - 1 as m, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? GROUP BY m`)
-      .bind(userId, yearStart),
-    db.prepare(`SELECT habit_id, date(logged_at, '${mod}') as d, COUNT(*) as cnt FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? GROUP BY habit_id, d`)
-      .bind(userId, heatStart),
+    db.prepare('SELECT COUNT(DISTINCT date(logged_at, ?)) as days FROM entries WHERE user_id = ?')
+      .bind(mod, userId),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC')
+      .bind(mod, userId, mod, streakCutoff),
+    db.prepare('SELECT CAST(strftime(\'%H\', logged_at, ?) AS INTEGER) as h, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) = ? GROUP BY h')
+      .bind(mod, userId, mod, today),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY d')
+      .bind(mod, userId, mod, weekStart),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? AND date(logged_at, ?) <= ? GROUP BY d')
+      .bind(mod, userId, mod, monthStart, mod, today),
+    db.prepare('SELECT CAST(strftime(\'%m\', logged_at, ?) AS INTEGER) - 1 as m, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY m')
+      .bind(mod, userId, mod, yearStart),
+    db.prepare('SELECT habit_id, date(logged_at, ?) as d, COUNT(*) as cnt FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY habit_id, d')
+      .bind(mod, userId, mod, heatStart),
   ]);
 
   const totalPoints = (totalRes.results[0] as { total: number }).total;

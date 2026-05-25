@@ -39,18 +39,22 @@ npm run cf-typegen       # regenerate worker-configuration.d.ts from wrangler.js
 
 ```
 src/
-  index.ts              # Hono app, CORS, route registration
+  index.ts              # Hono app, CORS, secureHeaders, rate limit wiring, route registration
   lib/
     id.ts               # newId() → UUID, nowIso() → ISO string
     jwt.ts              # signJwt / verifyJwt using native Web Crypto (no npm JWT lib)
+    crypto.ts           # randomState() → base64url, timingSafeEqual()
   middleware/
-    auth.ts             # authMiddleware: reads Bearer token, sets userId/userEmail in context
+    auth.ts             # authMiddleware: reads session cookie (preferred) or Bearer token
+    rateLimit.ts        # authRateLimit / writeRateLimit — Cloudflare rate limit bindings
   routes/
-    auth.ts             # GET /api/auth/google, /google/callback, GET/PATCH /api/auth/me
+    auth.ts             # GET /api/auth/google, /google/callback, POST /logout, GET/PATCH /api/auth/me
     habits.ts           # Full CRUD + archive/unarchive + nested reminders
     entries.ts          # GET/POST /api/entries, DELETE /api/entries/:id
     reminders.ts        # PUT/DELETE /api/reminders/:id
     stats.ts            # GET /api/stats (aggregated, timezone-aware)
+  schemas/
+    index.ts            # Zod schemas for all POST/PUT/PATCH routes
 migrations/
   0001_init.sql         # Full schema — users, oauth_accounts, habits, entries, reminders
 ```
@@ -59,19 +63,24 @@ migrations/
 
 ```
 Frontend → GET /api/auth/google
-  → 302 to Google consent screen
+  → generates random state (32 bytes), sets HttpOnly cookie oauth_state (10 min TTL)
+  → 302 to Google consent screen with &state=<value>
 
-Google → GET /api/auth/google/callback?code=...
+Google → GET /api/auth/google/callback?code=...&state=...
+  → validates state query param against oauth_state cookie (timing-safe)
   → exchange code → get user info from Google
   → upsert users + oauth_accounts in D1
   → signJwt({ sub: userId, email }) → 30-day JWT
-  → 302 to APP_URL/auth/callback?token=<jwt>
+  → sets HttpOnly cookie session=<jwt> (30 days)
+  → 302 to APP_URL/auth/callback  (no token in URL)
 
-Frontend → saves token to localStorage["habit_token"]
-All API calls → Authorization: Bearer <token>
+Frontend → calls /api/auth/me with credentials: 'include'
+All API calls → send Cookie: session=<jwt>  (or Authorization: Bearer <token> for compat)
+
+POST /api/auth/logout → deletes session cookie
 ```
 
-JWT is signed/verified with native `crypto.subtle` (HMAC-SHA256). No npm JWT lib — Workers runtime doesn't support Node crypto libraries.
+JWT is signed/verified with native `crypto.subtle` (HMAC-SHA256). No npm JWT lib — Workers runtime doesn't support Node crypto libraries. Token is delivered via HttpOnly cookie — never in URL or localStorage.
 
 ## Database Schema (summary)
 
@@ -94,6 +103,7 @@ reminders       id, habit_id, time (HH:MM), days (LMXJVSD), enabled
 ```
 GET    /api/auth/google
 GET    /api/auth/google/callback
+POST   /api/auth/logout
 GET    /api/auth/me
 PATCH  /api/auth/me                      { timezone?, display_name? }
 
@@ -119,7 +129,7 @@ GET    /api/stats                        totalPoints, todayPoints, streak, level
 GET    /api/health                       { ok, ts }
 ```
 
-All routes except `/api/auth/*` and `/api/health` require `Authorization: Bearer <token>`.
+All routes except `/api/auth/*` and `/api/health` require auth via Cookie `session=<jwt>` (preferred) or `Authorization: Bearer <token>` (legacy compat).
 
 ## Patterns to Follow
 
@@ -127,8 +137,10 @@ All routes except `/api/auth/*` and `/api/health` require `Authorization: Bearer
 - User scoping: every query includes `WHERE user_id = ?` — never trust client-provided user IDs
 - IDs: always use `newId()` (UUID v4); never auto-increment integers
 - Timestamps: always use `nowIso()` → UTC ISO8601; timezone math done in stats via `Intl.DateTimeFormat`
-- D1 queries: use `.bind()` — never interpolate user input into SQL strings
+- D1 queries: use `.bind()` — never interpolate user input into SQL strings (includes timezone modifiers)
 - Errors: return `c.json({ error: 'message' }, statusCode)` consistently
+- Input validation: use `zValidator('json', schema)` from `@hono/zod-validator`; schemas live in `src/schemas/index.ts`
+- `points` capped at 100, `value` at 100000, `logged_at` must be in the past and within 5 years, `timezone` validated against `Intl.supportedValuesOf('timeZone')`
 
 ## Adding a New Route
 
@@ -147,7 +159,7 @@ npm run db:migrate:remote  # production (after deploy)
 
 ## CORS
 
-Configured in `src/index.ts`. In dev, any `http://localhost:*` origin is allowed. In prod, only `ALLOWED_ORIGIN` is allowed. All requests require `Content-Type: application/json` and `Authorization` headers — these are declared in `allowHeaders`.
+Configured in `src/index.ts`. In dev, exact `http://localhost:<port>` origins are allowed (regex match, not prefix). In prod, only `ALLOWED_ORIGIN` is allowed. No wildcard fallback — if `ALLOWED_ORIGIN` is unset, all cross-origin requests are rejected. `credentials: true` is set so cookies travel cross-origin.
 
 ## Think Before Coding
 

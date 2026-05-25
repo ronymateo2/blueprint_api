@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { authMiddleware } from '../middleware/auth';
+import { reminderUpdateSchema } from '../schemas';
 
 type Bindings = Env;
 type Variables = { userId: string; userEmail: string };
@@ -8,7 +10,7 @@ const reminders = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 reminders.use('*', authMiddleware);
 
-reminders.put('/:id', async (c) => {
+reminders.put('/:id', zValidator('json', reminderUpdateSchema), async (c) => {
   const userId = c.get('userId');
   const reminderId = c.req.param('id');
 
@@ -22,7 +24,7 @@ reminders.put('/:id', async (c) => {
     .first();
   if (!rem) return c.json({ error: 'Not found' }, 404);
 
-  const body = await c.req.json<{ time?: string; days?: string; enabled?: number }>();
+  const body = c.req.valid('json');
   await c.env.DB.prepare(
     'UPDATE reminders SET time = COALESCE(?, time), days = COALESCE(?, days), enabled = COALESCE(?, enabled) WHERE id = ?',
   )

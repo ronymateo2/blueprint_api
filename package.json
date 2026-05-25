@@ -12,7 +12,9 @@
     "db:migrate:remote": "wrangler d1 migrations apply blueprint-habit --remote"
   },
   "dependencies": {
-    "hono": "^4.6.0"
+    "@hono/zod-validator": "^0.8.0",
+    "hono": "^4.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",

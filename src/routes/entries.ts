@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { authMiddleware } from '../middleware/auth';
 import { newId, nowIso } from '../lib/id';
+import { entryCreateSchema } from '../schemas';
 
 type Bindings = Env;
 type Variables = { userId: string; userEmail: string };
@@ -13,7 +15,7 @@ entries.use('*', authMiddleware);
 
 entries.get('/', async (c) => {
   const userId = c.get('userId');
-  const from = c.req.query('from'); // ISO date string
+  const from = c.req.query('from');
   const to = c.req.query('to');
   const habitId = c.req.query('habit_id');
 
@@ -32,16 +34,9 @@ entries.get('/', async (c) => {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
-entries.post('/', async (c) => {
+entries.post('/', zValidator('json', entryCreateSchema), async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json<{
-    habit_id: string;
-    value?: number;
-    note?: string;
-    logged_at?: string; // allow client to pass explicit time
-  }>();
-
-  if (!body.habit_id) return c.json({ error: 'habit_id required' }, 400);
+  const body = c.req.valid('json');
 
   // Verify habit belongs to user and get points
   const habit = await c.env.DB.prepare('SELECT id, points, type FROM habits WHERE id = ? AND user_id = ?')

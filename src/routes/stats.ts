@@ -133,8 +133,8 @@ stats.get('/home', async (c) => {
   const streakCutoff = toLocalDateStr(streakCutoffDate.toISOString(), tz);
 
   const [weekResult, streakResult] = await db.batch([
-    db.prepare(`SELECT date(logged_at, '${mod}') as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? GROUP BY d`).bind(userId, weekStart),
-    db.prepare(`SELECT DISTINCT date(logged_at, '${mod}') as d FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? ORDER BY d DESC`).bind(userId, streakCutoff),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY d').bind(mod, userId, mod, weekStart),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC').bind(mod, userId, mod, streakCutoff),
   ]);
 
   const weekMap = new Map<string, number>(
@@ -176,7 +176,7 @@ stats.get('/me', async (c) => {
 
   const [totalResult, streakResult] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(points), 0) as total FROM entries WHERE user_id = ?').bind(userId),
-    db.prepare(`SELECT DISTINCT date(logged_at, '${mod}') as d FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? ORDER BY d DESC`).bind(userId, streakCutoff),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC').bind(mod, userId, mod, streakCutoff),
   ]);
 
   const totalPoints = (totalResult.results[0] as { total: number }).total;
