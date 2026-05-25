@@ -20,18 +20,27 @@ function todayLocal(timezone: string): string {
   return toLocalDateStr(new Date().toISOString(), timezone);
 }
 
-// Snapshot of current UTC offset in minutes for the given timezone.
-// Used to build SQLite date modifiers (e.g. "+330 minutes") for local-date grouping.
+// UTC offset in minutes for the given timezone at the current instant.
+// Uses formatToParts to avoid locale-specific separators that break string parsing.
 // Approximation during DST transitions (±1h) — acceptable for habit tracking.
 function getOffsetMinutes(tz: string): number {
   try {
     const now = new Date();
-    const localStr = new Intl.DateTimeFormat('sv-SE', {
+    const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
-      dateStyle: 'short',
-      timeStyle: 'medium',
-    }).format(now);
-    return Math.round((new Date(localStr.replace(' ', 'T') + 'Z').getTime() - now.getTime()) / 60000);
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+    const p: Record<string, string> = {};
+    for (const part of parts) p[part.type] = part.value;
+    const local = new Date(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}Z`);
+    const offset = Math.round((local.getTime() - now.getTime()) / 60000);
+    return Number.isFinite(offset) ? offset : 0;
   } catch {
     return 0;
   }
