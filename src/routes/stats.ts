@@ -160,4 +160,38 @@ stats.get('/home', async (c) => {
   return c.json({ todayPoints, streak, weeklyChart });
 });
 
+stats.get('/me', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const user = await db.prepare('SELECT timezone FROM users WHERE id = ?').bind(userId).first<{ timezone: string }>();
+  const tz = user?.timezone ?? 'UTC';
+  const today = todayLocal(tz);
+  const offset = getOffsetMinutes(tz);
+  const mod = `${offset >= 0 ? '+' : ''}${offset} minutes`;
+
+  const streakCutoffDate = new Date(today + 'T12:00:00Z');
+  streakCutoffDate.setUTCDate(streakCutoffDate.getUTCDate() - 399);
+  const streakCutoff = toLocalDateStr(streakCutoffDate.toISOString(), tz);
+
+  const [totalResult, streakResult] = await db.batch([
+    db.prepare('SELECT COALESCE(SUM(points), 0) as total FROM entries WHERE user_id = ?').bind(userId),
+    db.prepare(`SELECT DISTINCT date(logged_at, '${mod}') as d FROM entries WHERE user_id = ? AND date(logged_at, '${mod}') >= ? ORDER BY d DESC`).bind(userId, streakCutoff),
+  ]);
+
+  const totalPoints = (totalResult.results[0] as { total: number }).total;
+
+  let streak = 0;
+  const checkDate = new Date(today + 'T12:00:00Z');
+  for (const { d } of streakResult.results as { d: string }[]) {
+    if (d !== toLocalDateStr(checkDate.toISOString(), tz)) break;
+    streak++;
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+
+  const level = Math.floor(totalPoints / 500) + 1;
+
+  return c.json({ totalPoints, streak, level });
+});
+
 export default stats;
