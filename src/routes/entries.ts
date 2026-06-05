@@ -53,9 +53,9 @@ entries.post('/', zValidator('json', entryCreateSchema), async (c) => {
     : habit.points;
 
   await c.env.DB.prepare(
-    'INSERT INTO entries (id, user_id, habit_id, value, points, logged_at, note, alignment, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO entries (id, user_id, habit_id, value, points, logged_at, note, alignment, day_energy, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
-    .bind(id, userId, body.habit_id, value, entryPoints, loggedAt, body.note ?? null, body.alignment ?? null, now)
+    .bind(id, userId, body.habit_id, value, entryPoints, loggedAt, body.note ?? null, body.alignment ?? null, body.day_energy ?? null, now)
     .run();
 
   const entry = await c.env.DB.prepare('SELECT * FROM entries WHERE id = ?').bind(id).first();

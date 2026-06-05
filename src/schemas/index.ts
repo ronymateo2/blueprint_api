@@ -39,6 +39,7 @@ export const entryCreateSchema = z.object({
     )
     .optional(),
   alignment: z.enum(['yes', 'maybe', 'no']).optional().nullable(),
+  day_energy: z.enum(['good', 'ok', 'hard']).optional().nullable(),
 });
 
 export const reminderCreateSchema = z.object({
