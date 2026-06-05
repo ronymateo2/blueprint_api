@@ -18,6 +18,8 @@ export const habitCreateSchema = z.object({
     .optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  identity: z.string().max(500).optional().nullable(),
+  min_action: z.string().max(300).optional().nullable(),
 });
 
 export const habitUpdateSchema = habitCreateSchema.partial();
@@ -36,6 +38,7 @@ export const entryCreateSchema = z.object({
       'logged_at must be in the past and within 5 years',
     )
     .optional(),
+  alignment: z.enum(['yes', 'maybe', 'no']).optional().nullable(),
 });
 
 export const reminderCreateSchema = z.object({
@@ -52,6 +55,7 @@ export const meUpdateSchema = z.object({
     .refine((tz) => VALID_TIMEZONES.has(tz), 'invalid timezone')
     .optional(),
   display_name: z.string().min(1).max(100).optional(),
+  identity: z.string().max(500).optional().nullable(),
 });
 
 export const skipCreateSchema = z.object({

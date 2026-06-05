@@ -152,7 +152,7 @@ auth.post('/logout', (c) => {
 
 auth.get('/me', authMiddleware, async (c) => {
   const userId = c.get('userId');
-  const user = await c.env.DB.prepare('SELECT id, email, display_name, avatar_url, timezone FROM users WHERE id = ?')
+  const user = await c.env.DB.prepare('SELECT id, email, display_name, avatar_url, timezone, identity FROM users WHERE id = ?')
     .bind(userId)
     .first();
   if (!user) return c.json({ error: 'User not found' }, 404);
@@ -165,13 +165,13 @@ auth.patch('/me', authMiddleware, zValidator('json', meUpdateSchema), async (c) 
   const body = c.req.valid('json');
   const now = nowIso();
   await c.env.DB.prepare(
-    'UPDATE users SET timezone = COALESCE(?, timezone), display_name = COALESCE(?, display_name), updated_at = ? WHERE id = ?',
+    'UPDATE users SET timezone = COALESCE(?, timezone), display_name = COALESCE(?, display_name), identity = COALESCE(?, identity), updated_at = ? WHERE id = ?',
   )
-    .bind(body.timezone ?? null, body.display_name ?? null, now, userId)
+    .bind(body.timezone ?? null, body.display_name ?? null, body.identity ?? null, now, userId)
     .run();
-  const user = await c.env.DB.prepare('SELECT id, email, display_name, avatar_url, timezone FROM users WHERE id = ?')
+  const user = await c.env.DB.prepare('SELECT id, email, display_name, avatar_url, timezone, identity FROM users WHERE id = ?')
     .bind(userId)
-    .first<{ id: string; email: string; display_name: string | null; avatar_url: string | null; timezone: string }>();
+    .first<{ id: string; email: string; display_name: string | null; avatar_url: string | null; timezone: string; identity: string | null }>();
   if (!user) return c.json({ error: 'User not found' }, 404);
   let token: string | undefined;
   if (body.timezone) {

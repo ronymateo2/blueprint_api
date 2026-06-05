@@ -100,6 +100,8 @@ habits.put('/:id', zValidator('json', habitUpdateSchema), async (c) => {
   const now = nowIso();
   const startDateSet = 'start_date' in body ? 1 : 0;
   const endDateSet = 'end_date' in body ? 1 : 0;
+  const identitySet = 'identity' in body ? 1 : 0;
+  const minActionSet = 'min_action' in body ? 1 : 0;
   await c.env.DB.prepare(
     `UPDATE habits SET
       name = COALESCE(?, name),
@@ -113,6 +115,8 @@ habits.put('/:id', zValidator('json', habitUpdateSchema), async (c) => {
       frequency_config = COALESCE(?, frequency_config),
       start_date = CASE WHEN ? = 1 THEN ? ELSE start_date END,
       end_date = CASE WHEN ? = 1 THEN ? ELSE end_date END,
+      identity = CASE WHEN ? = 1 THEN ? ELSE identity END,
+      min_action = CASE WHEN ? = 1 THEN ? ELSE min_action END,
       updated_at = ?
     WHERE id = ?`,
   )
@@ -128,6 +132,8 @@ habits.put('/:id', zValidator('json', habitUpdateSchema), async (c) => {
       body.frequency_config ?? null,
       startDateSet, body.start_date ?? null,
       endDateSet, body.end_date ?? null,
+      identitySet, body.identity ?? null,
+      minActionSet, body.min_action ?? null,
       now,
       id,
     )

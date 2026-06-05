@@ -1,0 +1,3 @@
+ALTER TABLE users ADD COLUMN identity TEXT;
+ALTER TABLE habits ADD COLUMN identity TEXT;
+ALTER TABLE habits ADD COLUMN min_action TEXT;
