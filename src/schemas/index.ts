@@ -63,3 +63,10 @@ export const skipCreateSchema = z.object({
   habit_id: z.string().min(1),
   local_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
+
+export const frictionSaveSchema = z.object({
+  habit_id: z.string().min(1),
+  local_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  cause: z.enum(['no_time', 'tired', 'forgot', 'mood', 'other']),
+  note: z.string().max(500).optional().nullable(),
+});
