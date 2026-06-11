@@ -46,6 +46,12 @@ function getOffsetMinutes(tz: string): number {
   }
 }
 
+// Local YYYY-MM-DD day-start → UTC ISO. Lets WHERE compare raw logged_at
+// (index-usable range scan) instead of date(logged_at, ?) (full partition scan).
+function localDayStartUtc(localDate: string, offsetMin: number): string {
+  return new Date(new Date(localDate + 'T00:00:00Z').getTime() - offsetMin * 60000).toISOString();
+}
+
 stats.get('/', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
@@ -133,8 +139,8 @@ stats.get('/home', async (c) => {
   const streakCutoff = toLocalDateStr(streakCutoffDate.toISOString(), tz);
 
   const [weekResult, streakResult] = await db.batch([
-    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY d').bind(mod, userId, mod, weekStart),
-    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC').bind(mod, userId, mod, streakCutoff),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND logged_at >= ? GROUP BY d').bind(mod, userId, localDayStartUtc(weekStart, offset)),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND logged_at >= ? ORDER BY d DESC').bind(mod, userId, localDayStartUtc(streakCutoff, offset)),
   ]);
 
   const weekMap = new Map<string, number>(
@@ -176,7 +182,7 @@ stats.get('/me', async (c) => {
 
   const [totalResult, streakResult] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(points), 0) as total FROM entries WHERE user_id = ?').bind(userId),
-    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC').bind(mod, userId, mod, streakCutoff),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND logged_at >= ? ORDER BY d DESC').bind(mod, userId, localDayStartUtc(streakCutoff, offset)),
   ]);
 
   const totalPoints = (totalResult.results[0] as { total: number }).total;

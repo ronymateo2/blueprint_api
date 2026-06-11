@@ -45,6 +45,12 @@ function addDays(dateStr: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Local YYYY-MM-DD day-start → UTC ISO. Lets WHERE compare raw logged_at
+// (index-usable range scan) instead of date(logged_at, ?) (full partition scan).
+function localDayStartUtc(localDate: string, offsetMin: number): string {
+  return new Date(new Date(localDate + 'T00:00:00Z').getTime() - offsetMin * 60000).toISOString();
+}
+
 points.get('/', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
@@ -68,18 +74,18 @@ points.get('/', async (c) => {
       .bind(userId),
     db.prepare('SELECT COUNT(DISTINCT date(logged_at, ?)) as days FROM entries WHERE user_id = ?')
       .bind(mod, userId),
-    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? ORDER BY d DESC')
-      .bind(mod, userId, mod, streakCutoff),
-    db.prepare('SELECT CAST(strftime(\'%H\', logged_at, ?) AS INTEGER) as h, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) = ? GROUP BY h')
-      .bind(mod, userId, mod, today),
-    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY d')
-      .bind(mod, userId, mod, weekStart),
-    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? AND date(logged_at, ?) <= ? GROUP BY d')
-      .bind(mod, userId, mod, monthStart, mod, today),
-    db.prepare('SELECT CAST(strftime(\'%m\', logged_at, ?) AS INTEGER) - 1 as m, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY m')
-      .bind(mod, userId, mod, yearStart),
-    db.prepare('SELECT habit_id, date(logged_at, ?) as d, COUNT(*) as cnt FROM entries WHERE user_id = ? AND date(logged_at, ?) >= ? GROUP BY habit_id, d')
-      .bind(mod, userId, mod, heatStart),
+    db.prepare('SELECT DISTINCT date(logged_at, ?) as d FROM entries WHERE user_id = ? AND logged_at >= ? ORDER BY d DESC')
+      .bind(mod, userId, localDayStartUtc(streakCutoff, offset)),
+    db.prepare('SELECT CAST(strftime(\'%H\', logged_at, ?) AS INTEGER) as h, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND logged_at >= ? AND logged_at < ? GROUP BY h')
+      .bind(mod, userId, localDayStartUtc(today, offset), localDayStartUtc(addDays(today, 1), offset)),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND logged_at >= ? GROUP BY d')
+      .bind(mod, userId, localDayStartUtc(weekStart, offset)),
+    db.prepare('SELECT date(logged_at, ?) as d, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND logged_at >= ? AND logged_at < ? GROUP BY d')
+      .bind(mod, userId, localDayStartUtc(monthStart, offset), localDayStartUtc(addDays(today, 1), offset)),
+    db.prepare('SELECT CAST(strftime(\'%m\', logged_at, ?) AS INTEGER) - 1 as m, COALESCE(SUM(points), 0) as pts FROM entries WHERE user_id = ? AND logged_at >= ? GROUP BY m')
+      .bind(mod, userId, localDayStartUtc(yearStart, offset)),
+    db.prepare('SELECT habit_id, date(logged_at, ?) as d, COUNT(*) as cnt FROM entries WHERE user_id = ? AND logged_at >= ? GROUP BY habit_id, d')
+      .bind(mod, userId, localDayStartUtc(heatStart, offset)),
   ]);
 
   const totalPoints = (totalRes.results[0] as { total: number }).total;
